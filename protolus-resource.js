@@ -79,6 +79,7 @@ var ProtolusResource = new Class({
             if(type(resource) == 'string') resource = {name:resource};
             if(resource.name.lastIndexOf('.') == -1) return; //no type, skip it
             var resourceType = resource.name.substring(resource.name.lastIndexOf('.')+1);
+            //console.log('?', resourceType.toLowerCase(), fileType.toLowerCase(), (resourceType.toLowerCase() == fileType.toLowerCase()) )
             if(resourceType.toLowerCase() == fileType.toLowerCase()) result.push(resource.name);
         });
         callback(result);
@@ -167,10 +168,10 @@ var import_resource = function(name, callback){
             count++;
             import_resource(dependency, function(){
                 count--;
-                if(count == 0) callback();
+                if(count == 0) callback(resource);
             })
         });
-        if(count == 0) callback();
+        if(count == 0) callback(resource);
     });
 }
 module.exports = function(name, callback){
@@ -191,21 +192,21 @@ module.exports.handleResourceCalls = function(request, response, passthru){
     var uri = url.parse(request.url, true);
     var value;
     var wasResourceRequest = false;
-    for(key in ProtolusResource.handlers){
+    for(var key in ProtolusResource.handlers){
         if(wasResourceRequest) return;
         if(uri.pathname.indexOf('/'+key+'/') === 0){
             var rem = uri.pathname.substring(('/'+key+'/').length);
             var resources = rem.split(".");
             var results = [];
-            var resource;
             array.forEachEmission(resources, function(name, index, returnFn){
-                resource = registry[name];
-                resource.files(key, function(files){
-                    array.forEach(files, function(file){
-                        results.push(file);
+                import_resource(name, function(resource){
+                    resource.files(key, function(files){
+                        array.forEach(files, function(file){
+                            results.push(file);
+                        });
+                        returnFn();
                     });
-                    returnFn();
-                })
+                });
             }, function(){
                 response.writeHead(200);
                 response.end(results.join("\n"));
