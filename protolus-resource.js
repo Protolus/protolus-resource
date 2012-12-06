@@ -53,6 +53,49 @@ var Options = new Class({
     }
 });
 
+var Protolus = function(options){
+    if(!Protolus.loaded){
+        //bootstrap protolus, so we can ingest packages
+        Protolus.packages = ['mootools-core','protolus'];
+        Protolus.loaded = {};
+        Protolus.scripts = {};
+        console.log('done');
+    }
+}
+
+Protolus.require = function(moduleName, callback){
+    a = {};
+    if(Protolus.scripts[moduleName]){
+        if(!Protolus.loaded[moduleName]){
+            var module = {};
+            var exports = {};
+            eval(Protolus.scripts[moduleName]);
+            Protolus.loaded[moduleName] = module.exports || exports;
+            if(callback) callback(Protolus.loaded[moduleName]);
+            else return Protolus.loaded[moduleName];
+        }else{
+            if(callback) callback(Protolus.loaded[moduleName]);
+            else return Protolus.loaded[moduleName];
+        }
+    }else{
+        throw('Unloaded Module:'+moduleName+'!');
+        //todo: async load
+        return function(callback){
+            if(callback) a.callback = callback;
+            return a.response || false;
+        };
+    }
+}
+
+Protolus.register = function(name, source){
+    if(!Protolus.loaded) Protolus();
+    if(name && source){
+        Protolus.scripts[name] = source;
+    }else{
+        //todo: autoregister on pageload
+    }
+};
+
 var ProtolusResource = new Class({
     Implements : [Emitter, Options],
     options : {
@@ -67,21 +110,49 @@ var ProtolusResource = new Class({
         if(!options) options = {};
         if(!options.name) throw('Unrecognized Options');
         this.setOptions(options);
-        if(!this.options.remote){ //we want to locally load this file
-            this.exported = require(this.options.name);
+        if(options.name == 'core'){
+            this.fileNames = function(fileType, callback){
+                var result = [];
+                if(fileType == 'js'){
+                    result.push('#core#');
+                }
+                callback(result);
+            };
+            this.files = function(fileType, callback){
+                var result = [];
+                if(fileType == 'js'){
+                    result.push([
+                        'var Protolus = '+(Protolus.toString())+';',
+                        'Protolus.require = '+(Protolus.require.toString())+';',
+                        'Protolus.register = '+(Protolus.register.toString())+';',
+                        'window.onload = Protolus;'
+                    ].join("\n"));
+                }
+                callback(result);
+            };
+        }else{
+            if(!this.options.remote){ //we want to locally load this file
+                this.exported = require(this.options.name);
+            }
+            this.package = require(this.options.name+'/package');
         }
-        this.package = require(this.options.name+'/package');
         callback(this);
     },
     fileNames : function(fileType, callback){
         var result = [];
-        array.forEach(this.package.resources, function(resource){
-            if(type(resource) == 'string') resource = {name:resource};
-            if(resource.name.lastIndexOf('.') == -1) return; //no type, skip it
-            var resourceType = resource.name.substring(resource.name.lastIndexOf('.')+1);
-            //console.log('?', resourceType.toLowerCase(), fileType.toLowerCase(), (resourceType.toLowerCase() == fileType.toLowerCase()) )
-            if(resourceType.toLowerCase() == fileType.toLowerCase()) result.push(resource.name);
-        });
+        var process = function(resource){
+            if(type(resource) == 'string') resource = {location:resource};
+            if(resource.location.lastIndexOf('.') == -1) return; //no type, skip it
+            var resourceType = resource.location.substring(resource.location.lastIndexOf('.')+1);
+            if(resourceType.toLowerCase() == fileType.toLowerCase()) result.push(resource.location);
+        };
+        if(fileType == 'main') result.push(this.package.main);
+        else array.forEach(this.package.resources, function(resource){
+            if(type(resource) == 'string') resource = {location:resource};
+            if(resource.location.lastIndexOf('.') == -1) return; //no type, skip it
+            var resourceType = resource.location.substring(resource.location.lastIndexOf('.')+1);
+            if(resourceType.toLowerCase() == fileType.toLowerCase()) result.push(resource.location);
+        } );
         callback(result);
     },
     getPath : function(name){ //this is an evil synchronous function
@@ -98,6 +169,7 @@ var ProtolusResource = new Class({
         var location = this.options.location;
         var compact = this.options.compact;
         var modulePath = this.getPath(this.options.name);
+        var moduleName = this.options.name;
         this.fileNames(fileType, fn.bind(function(fileNames){
             var files = [];
             array.forEachEmission(fileNames, fn.bind(function(fileName, index, returnFn){
@@ -106,7 +178,7 @@ var ProtolusResource = new Class({
                     handler.handle({
                         body : data,
                         location : path,
-                        name : fileName,
+                        name : moduleName,
                         compact : compact
                     }, function(result){
                         files.push(result);
@@ -152,9 +224,26 @@ ProtolusResource.JavascriptHandler = new Class({
     
 });
 
+ProtolusResource.JavascriptMainHandler = new Class({
+    Extends : ProtolusResource.Handler,
+    initialize : function(options){
+        this.parent('js')
+    },
+    handle : function(options, callback){
+        var text = options.body.replace( /\n/g, ' ').replace( /\\/g, '\\\\').replace(/'/g, "\\'");
+        console.log(text);
+        options.body = 'Protolus.register(\''+options.name+'\', \''+text+'\')';
+        options.body += "\n"+' //@ sourceURL='+options.location+"\n"
+        callback(options.body);
+    }
+    //todo: optionaly prescan load for 'requires'
+    
+});
+
 ProtolusResource.handlers = {};
 ProtolusResource.handlers['css'] = new ProtolusResource.Handler('css');
 ProtolusResource.handlers['js'] = new ProtolusResource.JavascriptHandler();
+ProtolusResource.handlers['main'] = new ProtolusResource.JavascriptMainHandler();
 
 var registry = {};
 var includes = [];
@@ -164,7 +253,7 @@ var import_resource = function(name, callback){
     new ProtolusResource(name, function(resource){
         registry[name] = resource;
         var count = 0;
-        array.forEach(resource.package.dependencies, function(dependency){
+        if(resource.package) array.forEach(resource.package.dependencies, function(dependency){
             count++;
             import_resource(dependency, function(){
                 count--;
@@ -183,6 +272,66 @@ module.exports = function(name, callback){
 module.exports.Resource = ProtolusResource;
 module.exports.allResources = function(type, callback){
     callback(includes);
+}
+module.exports.headIncludes = function(options, callback){
+    if(typeof options == 'boolean') options = {combined : options};
+    var res = module.exports;
+    tags = [];
+    var compact = options.compact?'/compact':'';
+    var handleTags;
+    if(options.combined){
+        handleTags = function(names, tag, attr, type){
+            tags.push('<'+tag+' '+attr+'="/'+type+compact+'/'+(names.join("."))+'"></'+tag+'>');
+        };
+    }else{
+        handleTags = function(names, tag, attr, type){
+            for(var index in names){
+                tags.push('<'+tag+' '+attr+'="/'+type+compact+'/'+(names[index])+'"></'+tag+'>');
+            }
+        };
+    }
+    handleTags(['core'], 'script', 'src', 'js');
+    res.allResourcesWithDependencies('main', function(mainScriptNames){
+        handleTags(mainScriptNames, 'script', 'src', 'main');
+        res.allResourcesWithDependencies('css', function(styleNames){
+            handleTags(styleNames, 'link', 'href', 'css');
+            res.allResourcesWithDependencies('js', function(scriptNames){
+                handleTags(scriptNames, 'script', 'src', 'js');
+                callback(tags);
+            });
+        });
+    });
+    /*if(options.combined){
+        res.allResourcesWithDependencies('main', function(mainScriptNames){
+            if(options.core !== false) mainScriptNames.unshift('core');
+            tags.push('<script src="/main'+compact+'/'+(mainScriptNames.join("."))+'"></sc'+'ript>');
+            res.allResourcesWithDependencies('css', function(styleNames){
+                tags.push('<link href="/css'+compact+'/'+(styleNames.join("."))+'"></link>');
+                res.allResourcesWithDependencies('js', function(scriptNames){
+                    tags.push('<script src="/js'+compact+'/'+(scriptNames.join("."))+'"></sc'+'ript>');
+                    callback(tags);
+                });
+            });
+        });
+    }else{
+        res.allResourcesWithDependencies('main', function(mainScriptNames){
+            if(options.core !== false) mainScriptNames.unshift('core');
+            for(var index in mainScriptNames){
+                tags.push('<script src="/main'+compact+'/'+(mainScriptNames[index])+'"></sc'+'ript>');
+            }
+            res.allResourcesWithDependencies('css', function(styleNames){
+                for(var index in styleNames){
+                    tags.push('<link href="/css'+compact+'/'+(styleNames[index])+'"></link>');
+                }
+                res.allResourcesWithDependencies('js', function(scriptNames){
+                    for(var index in scriptNames){
+                        tags.push('<script src="/js'+compact+'/'+(scriptNames[index])+'"></sc'+'ript>');
+                    }
+                    callback(tags);
+                });
+            });
+        });
+    }*/
 }
 module.exports.allResourcesWithDependencies = function(type, callback){
     callback(resources);
