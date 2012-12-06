@@ -37,7 +37,7 @@ or I can get an array of head tags, after resources are registered, using resour
 - *compact* : are the resources built uncompressed, or are they minified/compacted/etc. ?
 
         resource.headIncludes(true, function(tags){
-            res.end('<html><head>(tags.join("\n"))+'</head><body><h1>Heya!</h1></body></html>');
+            res.end('<html><head>'+(tags.join("\n"))+'</head><body><h1>Heya!</h1></body></html>');
         });
 
 On the other side of things, in your server, theres a passthrough for handling the serving of all these resources which we can use to put it all together:
