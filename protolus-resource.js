@@ -42,7 +42,7 @@ var Options = new Class({
     setOptions : function(options){
         if(!this.options) this.options = {};
         var value;
-        for(key in options){
+        for(var key in options){
             value = options[key];
             if(this.on && key.substring(0,2) == 'on' && key.substring(2,3) == key.substring(2,3).toUpperCase()){
                 var event = key.substring(2,3).toLowerCase()+key.substring(3);
@@ -59,7 +59,6 @@ var Protolus = function(options){
         Protolus.packages = ['mootools-core','protolus'];
         Protolus.loaded = {};
         Protolus.scripts = {};
-        console.log('done');
     }
 }
 
@@ -231,7 +230,6 @@ ProtolusResource.JavascriptMainHandler = new Class({
     },
     handle : function(options, callback){
         var text = options.body.replace( /\n/g, ' ').replace( /\\/g, '\\\\').replace(/'/g, "\\'");
-        console.log(text);
         options.body = 'Protolus.register(\''+options.name+'\', \''+text+'\')';
         options.body += "\n"+' //@ sourceURL='+options.location+"\n"
         callback(options.body);

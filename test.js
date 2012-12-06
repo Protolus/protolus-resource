@@ -1,65 +1,61 @@
 var should = require("should");
 var request = require('request');
 var http = require('http');
-var port = 4599;
+var port = 221;
+var resource = require('./protolus-resource');
 describe('ProtolusResource', function(){
     describe('Simple \'test-component\' tests', function(){
-        var server
+        var server;
+        var running = false;
         before(function(done){
             try{
                 server = http.createServer(function(req, res) {
-                    console.log('Server Running');
                     resource.handleResourceCalls(req, res, function(){
                         //serve a page
                     });
-                    done();
                 }).listen(port);
+                server.on("listening", function() {
+                    running = true;
+                    done();
+                });
             }catch(ex){
                 should.not.exist(ex);
             }
         });
+        
         it('Server Runs', function(){
-            //should.not.exist(ex);
-            /*
-            try{
-                http.createServer(function(req, res) {
-                    console.log('Server Running');
-                    resource.handleResourceCalls(req, res, function(){
-                        //serve a page
-                    });
-                }).listen(80);
-            }catch(ex){
-                should.not.exist(ex);
-            }//*/
+            should.equal(running, true);
         });
-        it('js URL is non-empty and serves valid JS', function(){
-            /*try{
-                http.createServer(function(req, res) {
-                    console.log('Server Running');
-                    resource.handleResourceCalls(req, res, function(){
-                        //serve a page
-                    });
-                }).listen(port);
-            }catch(ex){
-                should.not.exist(ex);
-            }*/
-            console.log('blah');
-            request('http://localhost/js/test-component', function (error, response, body) {
-                var check = require('syntax-error');
+        
+        it('js URL is non-empty and serves valid JS', function(done){
+            request('http://localhost:'+port+'/js/test-component', function (error, response, body) {
                 if (!error && response.statusCode == 200) {
-                    should.not.equal(body, '');
+                    var check = require('syntax-error');
+                    body.should.not.equal('');
                     var err = check(body);
                     should.not.exist(err);
                 }
+                if(error) should.fail('Error fetching URL', error);
+                if(response.statusCode != 200) should.fail('Fetch not OK', 'Code:'+response.statusCode);
+                done();
             });
         });
-        it('css URL is non-empty', function(){
-            request('http://localhost/css/test-component', function (error, response, body) {
-                var check = require('syntax-error');
+        
+        it('css URL is non-empty', function(done){
+            request('http://localhost:'+port+'/css/test-component', function (error, response, body) {
                 if (!error && response.statusCode == 200) {
-                    should.not.equal(body, '');
+                    var check = require('syntax-error');
+                    body.should.not.equal('');
                 }
+                if(error) should.fail('Error fetching URL', error);
+                if(response.statusCode != 200) should.fail('Fetch not OK', 'Code:'+response.statusCode);
+                done();
             });
+        });
+        
+        after(function(done) {
+            server.close();
+            done();
         });
     });
 });
