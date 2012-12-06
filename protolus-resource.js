@@ -299,37 +299,6 @@ module.exports.headIncludes = function(options, callback){
             });
         });
     });
-    /*if(options.combined){
-        res.allResourcesWithDependencies('main', function(mainScriptNames){
-            if(options.core !== false) mainScriptNames.unshift('core');
-            tags.push('<script src="/main'+compact+'/'+(mainScriptNames.join("."))+'"></sc'+'ript>');
-            res.allResourcesWithDependencies('css', function(styleNames){
-                tags.push('<link href="/css'+compact+'/'+(styleNames.join("."))+'"></link>');
-                res.allResourcesWithDependencies('js', function(scriptNames){
-                    tags.push('<script src="/js'+compact+'/'+(scriptNames.join("."))+'"></sc'+'ript>');
-                    callback(tags);
-                });
-            });
-        });
-    }else{
-        res.allResourcesWithDependencies('main', function(mainScriptNames){
-            if(options.core !== false) mainScriptNames.unshift('core');
-            for(var index in mainScriptNames){
-                tags.push('<script src="/main'+compact+'/'+(mainScriptNames[index])+'"></sc'+'ript>');
-            }
-            res.allResourcesWithDependencies('css', function(styleNames){
-                for(var index in styleNames){
-                    tags.push('<link href="/css'+compact+'/'+(styleNames[index])+'"></link>');
-                }
-                res.allResourcesWithDependencies('js', function(scriptNames){
-                    for(var index in scriptNames){
-                        tags.push('<script src="/js'+compact+'/'+(scriptNames[index])+'"></sc'+'ript>');
-                    }
-                    callback(tags);
-                });
-            });
-        });
-    }*/
 }
 module.exports.allResourcesWithDependencies = function(type, callback){
     callback(resources);
