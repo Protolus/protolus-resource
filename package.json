@@ -2,7 +2,7 @@
     "name": "protolus-resource",
     "homepage": "https://github.com/Protolus/protolus-resource",
     "version": "0.0.1-alpha",
-    "main": "protolus-router.js",
+    "main": "protolus-resource.js",
     "description": "a CommonJS based server-side resource delivery mechanism with client side shim",
     "keywords": [
         "url",
