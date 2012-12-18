@@ -274,7 +274,7 @@ module.exports.allResources = function(type, callback){
 module.exports.headIncludes = function(options, callback){
     if(typeof options == 'boolean') options = {combined : options};
     var res = module.exports;
-    tags = [];
+    var tags = [];
     var compact = options.compact?'/compact':'';
     var handleTags;
     if(options.combined){
