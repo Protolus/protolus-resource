@@ -1,16 +1,19 @@
 var should = require("should");
 var request = require('request');
 var http = require('http');
-var port = 221;
-var resource = require('./protolus-resource');
+var port = 247;
+require('npm-trospect').require = require;
+var Resource = require('./protolus-resource');
+require('./handler-js');
+require('./handler-css');
 describe('ProtolusResource', function(){
-    describe('Simple \'test-component\' tests', function(){
+    describe('\'test-component\'', function(){
         var server;
         var running = false;
         before(function(done){
             try{
                 server = http.createServer(function(req, res) {
-                    resource.handleResourceCalls(req, res, function(){
+                    Resource.handle(req, res, function(){
                         //serve a page
                     });
                 }).listen(port);
@@ -44,7 +47,6 @@ describe('ProtolusResource', function(){
         it('css URL is non-empty', function(done){
             request('http://localhost:'+port+'/css/test-component', function (error, response, body) {
                 if (!error && response.statusCode == 200) {
-                    var check = require('syntax-error');
                     body.should.not.equal('');
                 }
                 if(error) should.fail('Error fetching URL', error);

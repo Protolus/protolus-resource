@@ -1,74 +1,44 @@
-//todo: events support
-var prime = require('prime');
+var ext = require('prime-ext');
+var prime = ext(require('prime'));
 var Class = require('Classy');
 var type = require('prime/util/type');
-var array = require('prime/es5/array');
-array.forEachEmission = function(collection, callback, complete){ //one at a time
-    var a = {count : 0};
-    var fn = function(collection, callback, complete){
-        if(a.count >= collection.length){
-            if(complete) complete();
-        }else{
-            callback(collection[a.count], a.count, function(){
-                a.count++;
-                fn(collection, callback, complete);
-            });
-        }
-    };
-    fn(collection, callback, complete);
-};
-array.forAllEmissions = function(collection, callback, complete){ //parallel
-    var a = {count : 0};
-    var begin = function(){
-        a.count++;
-    };
-    var finish = function(){
-        a.count--;
-        if(a.count == 0 && complete) complete();
-    };
-    array.forEach(collection, function(value, key){
-        begin();
-        callback(value, key, function(){
-           finish(); 
-        });
-    });
-};
+var string = ext(require('prime/es5/string'));
+var array = ext(require('prime/es5/array'));
 var fn = require('prime/es5/function');
 var regexp = require('prime/es5/regexp');
 var Emitter = require('prime/util/emitter');
 var fs = require('fs');
+var Options = require('prime-ext/options');
+var Registry = require('prime-ext/registry');
+var Filters = require('prime-ext/filters');
+var InternalWorker = require('prime-ext/internal-worker');
+require.pkg = require("npm-trospect");
+require.scan = require("npm-trospect/scanner");
 
-var Options = new Class({
-    setOptions : function(options){
-        if(!this.options) this.options = {};
-        var value;
-        for(var key in options){
-            value = options[key];
-            if(this.on && key.substring(0,2) == 'on' && key.substring(2,3) == key.substring(2,3).toUpperCase()){
-                var event = key.substring(2,3).toLowerCase()+key.substring(3);
-                this.on(event, value);
-            }
-            this.options[key] = value;
-        }
-    }
-});
-
-var Protolus = function(options){
+var Client = function(options){
     if(!Protolus.loaded){
         //bootstrap protolus, so we can ingest packages
         Protolus.packages = ['mootools-core','protolus'];
         Protolus.loaded = {};
         Protolus.scripts = {};
     }
-}
-
-Protolus.require = function(moduleName, callback){
+};
+Client.require = function(moduleName, callback){
     a = {};
     if(Protolus.scripts[moduleName]){
         if(!Protolus.loaded[moduleName]){
             var module = {};
             var exports = {};
-            eval(Protolus.scripts[moduleName]);
+            try{
+                eval(Protolus.scripts[moduleName]);
+            }catch(ex){
+                if(ex.line){
+                    window.eh = Protolus.scripts[moduleName];
+                    var lines = Protolus.scripts[moduleName].split("\\n");
+                    ex.lineText = lines[ex.line];
+                }
+                console.log('it\'s a fucking error!', ex);
+            }
             Protolus.loaded[moduleName] = module.exports || exports;
             if(callback) callback(Protolus.loaded[moduleName]);
             else return Protolus.loaded[moduleName];
@@ -84,117 +54,107 @@ Protolus.require = function(moduleName, callback){
             return a.response || false;
         };
     }
-}
-
-Protolus.register = function(name, source){
+};
+Client.register = function(name, source){
     if(!Protolus.loaded) Protolus();
     if(name && source){
-        Protolus.scripts[name] = source;
+        var lines = JSON.parse(source);
+        Protolus.scripts[name] = lines.join("\n");
     }else{
         //todo: autoregister on pageload
     }
 };
 
-var ProtolusResource = new Class({
-    Implements : [Emitter, Options],
-    options : {
-        remote : true,
-        location : '.'
-    },
-    cache : {
-        
-    },
+var Resource = new Class({
+    Implements : [Emitter, Options, InternalWorker],
     initialize : function(options, callback){
-        if(type(options) == 'string') options = {name:options};
-        if(!options) options = {};
-        if(!options.name) throw('Unrecognized Options');
+        if(typeof options == 'string') options = {name:options};
+        if(callback) options.onLoad = callback;
         this.setOptions(options);
+        this.registry = this.options.registry || Resource.registry;
+        this.addJob();
+        this.manifest = require.pkg(this.options.name);
         if(options.name == 'core'){
             this.fileNames = function(fileType, callback){
-                var result = [];
-                if(fileType == 'js'){
-                    result.push('#core#');
-                }
-                callback(result);
+                if(fileType == 'js') callback(['#core#']);
+                else callback([]);
             };
             this.files = function(fileType, callback){
-                var result = [];
                 if(fileType == 'js'){
-                    result.push([
-                        'var Protolus = '+(Protolus.toString())+';',
-                        'Protolus.require = '+(Protolus.require.toString())+';',
-                        'Protolus.register = '+(Protolus.register.toString())+';',
+                    callback([[
+                        'var Protolus = '+(Client.toString())+';',
+                        'Protolus.require = '+(Client.require.toString())+';',
+                        'Protolus.register = '+(Client.register.toString())+';',
                         'window.onload = Protolus;'
-                    ].join("\n"));
-                }
-                callback(result);
+                    ].join("\n")]);
+                }else callback([]);
             };
+            if(this.options.onLoad) this.options.onLoad(this);
         }else{
-            if(!this.options.remote){ //we want to locally load this file
-                this.exported = require(this.options.name);
-            }
-            this.package = require(this.options.name+'/package');
+            if(!this.manifest.autogenerated) require.scan.full(this.manifest, fn.bind(function(data){
+                    this.removeJob();
+                    if(this.options.onLoad) this.options.onLoad(this);
+            }, this));
         }
-        callback(this);
+        this.registry.register(this.options.name, this);
+    },
+    dependencyNames : function(fileType, callback){
+        this.whenReady(fn.bind(function(){
+            var deps = prime.merge(
+                this.manifest.scanned_subpackages, 
+                prime.keys(this.manifest.merged_dependencies)
+            );
+            callback(deps);
+        }, this));
     },
     fileNames : function(fileType, callback){
-        var result = [];
-        var process = function(resource){
-            if(type(resource) == 'string') resource = {location:resource};
-            if(resource.location.lastIndexOf('.') == -1) return; //no type, skip it
-            var resourceType = resource.location.substring(resource.location.lastIndexOf('.')+1);
-            if(resourceType.toLowerCase() == fileType.toLowerCase()) result.push(resource.location);
-        };
-        if(fileType == 'main') result.push(this.package.main);
-        else array.forEach(this.package.resources, function(resource){
-            if(type(resource) == 'string') resource = {location:resource};
-            if(resource.location.lastIndexOf('.') == -1) return; //no type, skip it
-            var resourceType = resource.location.substring(resource.location.lastIndexOf('.')+1);
-            if(resourceType.toLowerCase() == fileType.toLowerCase()) result.push(resource.location);
-        } );
-        callback(result);
-    },
-    getPath : function(name){ //this is an evil synchronous function
-        var result;
-        array.forEach(process.mainModule.paths, function(path){
-            var fullPath = path+'/'+name;
-            if(fs.existsSync(fullPath) && !result) result = fullPath;
-        });
-        if(!result) throw('no path found for module "'+name+'"!');
-        return result;
+        if(type(fileType) == 'function' && !callback){
+            callback = fileType;
+            delete fileType;
+        }
+        this.whenReady(fn.bind(function(){
+            var dependencies = this.manifest.resources.slice(0);
+            if(fileType) dependencies = array.filter(dependencies, Filters.fileTypeCaselessLower(fileType));
+            callback(dependencies);
+        }, this));
     },
     files : function(fileType, callback){
-        var handler = ProtolusResource.handlers[fileType];
-        var location = this.options.location;
-        var compact = this.options.compact;
-        var modulePath = this.getPath(this.options.name);
-        var moduleName = this.options.name;
+        var handler = Resource.handlers[fileType];
         this.fileNames(fileType, fn.bind(function(fileNames){
             var files = [];
             array.forEachEmission(fileNames, fn.bind(function(fileName, index, returnFn){
-                var path = modulePath+'/'+fileName;
-                handler.load(path, function(data){
-                    handler.handle({
-                        body : data,
-                        location : path,
-                        name : moduleName,
-                        compact : compact
-                    }, function(result){
-                        files.push(result);
-                        returnFn();
-                    });
-                });
+                var path = (this.manifest.base_directory+'/'+this.options.name+'/'+fileName).replace('/./', '/');
+                handler.load(path, fn.bind(function(data){
+                    files.push(data);
+                    returnFn();
+                }, this));
             }, this), function(){
-                callback(files);
+                callback(files, fileNames);
             });
         }, this));
-    },
-    resource : function(name){
-        
     }
 });
 
-ProtolusResource.Handler = new Class({
+Resource.Registry = new Class({ //an instance of this will manage deps for a single instance
+    Implements : [Emitter, Options],
+    resources : [],
+    explicit : [],
+    options : {},
+    initialize : function(options){
+        this.setOptions(options);
+    },
+    register : function(key, value, callback){
+        if(!array.contains(this.resources, key)){
+            this.resources.push(key);
+            Resource.registry.register(key, value);
+        }else if(callback) callback();
+    },
+    require : function(key){
+        if(array.contains(this.resources, key)) return Resource.registry.require(key);
+    }
+});
+
+Resource.Handler = new Class({
     type : '',
     initialize : function(options){
         if(type(options) == 'string') this.type = options;
@@ -204,131 +164,195 @@ ProtolusResource.Handler = new Class({
     },
     load : function(location, callback){
         fs.readFile(location, 'utf8', function(err, data){
-            if(err) throw(err);
+            if(err) console.log(err, (new Error()).stack);
             callback(data);
         });
-    }
-});
-
-ProtolusResource.JavascriptHandler = new Class({
-    Extends : ProtolusResource.Handler,
-    initialize : function(options){
-        this.parent('js')
     },
-    handle : function(options, callback){
-        options.body += "\n"+' //@ sourceURL='+options.location+"\n"
-        callback(options.body);
-    }
-    //todo: optionaly prescan load for 'requires'
-    
-});
-
-ProtolusResource.JavascriptMainHandler = new Class({
-    Extends : ProtolusResource.Handler,
-    initialize : function(options){
-        this.parent('js')
-    },
-    handle : function(options, callback){
-        var text = options.body.replace( /\n/g, ' ').replace( /\\/g, '\\\\').replace(/'/g, "\\'");
-        options.body = 'Protolus.register(\''+options.name+'\', \''+text+'\')';
-        options.body += "\n"+' //@ sourceURL='+options.location+"\n"
-        callback(options.body);
-    }
-    //todo: optionaly prescan load for 'requires'
-    
-});
-
-ProtolusResource.handlers = {};
-ProtolusResource.handlers['css'] = new ProtolusResource.Handler('css');
-ProtolusResource.handlers['js'] = new ProtolusResource.JavascriptHandler();
-ProtolusResource.handlers['main'] = new ProtolusResource.JavascriptMainHandler();
-
-var registry = {};
-var includes = [];
-var resources = [];
-var import_resource = function(name, callback){
-    resources.push(name);
-    new ProtolusResource(name, function(resource){
-        registry[name] = resource;
-        var count = 0;
-        if(resource.package) array.forEach(resource.package.dependencies, function(dependency){
-            count++;
-            import_resource(dependency, function(){
-                count--;
-                if(count == 0) callback(resource);
-            })
-        });
-        if(count == 0) callback(resource);
-    });
-}
-module.exports = function(name, callback){
-    if(!registry[name]){
-        includes.push(name);
-        import_resource(name, callback)
-    } else if(callback) callback(registry[name]);
-};
-module.exports.Resource = ProtolusResource;
-module.exports.allResources = function(type, callback){
-    callback(includes);
-}
-module.exports.headIncludes = function(options, callback){
-    if(typeof options == 'boolean') options = {combined : options};
-    var res = module.exports;
-    var tags = [];
-    var compact = options.compact?'/compact':'';
-    var handleTags;
-    if(options.combined){
-        handleTags = function(names, tag, attr, type){
-            tags.push('<'+tag+' '+attr+'="/'+type+compact+'/'+(names.join("."))+'"></'+tag+'>');
+    tagProfile : function(){
+        return {
+            name : '!--',
+            attrs : {
+            },
+            target : 'unknown'
         };
+    }
+});
+
+Resource.import = function(name, registry, callback, isDependency){
+    if(type(registry) == 'function' && !callback){
+        callback = registry;
+        delete registry;
+    }
+    if(!registry) registry = Resource.registry;
+    if(registry.explicit && !isDependency) registry.explicit.push(name)
+    var resource;
+    var handleDependencies = function(dependencies, callback){
+        array.forAllEmissions(dependencies, function(name, index, rtrn){
+            Resource.import(name, registry, function(resource){
+                rtrn();
+            }, true);
+        }, function(){
+            callback();
+        });
+    };
+    if(!(resource = registry.require(name))){
+        new Resource(name, function(resource){
+            if(!registry.require(name)){
+                registry.register(name, resource);
+                if(resource.dependencies) handleDependencies(resource.dependencies, function(){
+                    callback(resource);
+                });
+                else callback(resource);
+            }else callback(registry.require(name));
+        })
     }else{
-        handleTags = function(names, tag, attr, type){
-            for(var index in names){
-                tags.push('<'+tag+' '+attr+'="/'+type+compact+'/'+(names[index])+'"></'+tag+'>');
-            }
-        };
-    }
-    handleTags(['core'], 'script', 'src', 'js');
-    res.allResourcesWithDependencies('main', function(mainScriptNames){
-        handleTags(mainScriptNames, 'script', 'src', 'main');
-        res.allResourcesWithDependencies('css', function(styleNames){
-            handleTags(styleNames, 'link', 'href', 'css');
-            res.allResourcesWithDependencies('js', function(scriptNames){
-                handleTags(scriptNames, 'script', 'src', 'js');
-                callback(tags);
-            });
+        if(resource.dependencies) handleDependencies(resource.dependencies, function(){
+            callback(resource);
         });
+        else callback(resource);
+    }
+};
+
+Resource.registry = new Registry(); //this is the universal registry, which buffers all instances
+
+var handleExcludes = function(work, registry, excludes, callback){
+    if(type(excludes) == 'function' && !callback){
+        callback = excludes;
+        excludes = [];
+    }
+    if(!registry) registry = Resource.registry;
+    if(!excludes) excludes = [];
+    var results = work(registry);
+    var filtered = [];
+    array.forEach(results, function(result){
+        if(!array.contains(excludes, result)) filtered.push(registry.require(result));
     });
+    if(callback) callback(filtered);
+    return filtered;
 }
-module.exports.allResourcesWithDependencies = function(type, callback){
-    callback(resources);
+
+Resource.explicit = function(registry, excludes, callback){ //just the things we explicitly included
+    return handleExcludes(function(registry){
+        return registry.explicit || [];
+    }, registry, excludes, callback);
 }
-module.exports.handleResourceCalls = function(request, response, passthru){
+
+Resource.includes = function(registry, excludes, callback){
+    return handleExcludes(function(registry){
+        return registry.resources || prime.keys(registry.registry);
+    }, registry, excludes, callback);
+}
+
+var assembleAttrs = function(attrs, target, value){
+    var attributes = [];
+    if(attrs[target]) attrs[target] = attrs[target].replace('{**}');
+    else attrs[target] = value;
+    prime.each(attrs, function(value, key){
+        attributes.push(key+'="'+value+'"');
+    });
+    attributes.join(' ');
+};
+
+Resource.head = function(options, callback){ //get head
+    if(!options.registry) options.registry = Resource.registry;
+    var compact = (options.compact === false?'':'/compact');
+    var dependencies = (options.dependencies === false?'':'/dependencies');
+    var handler = function(resources){
+        var tags = [];
+        if(options.inline){
+            //todo
+        }else{
+            if(options.combined === false){
+                var types = prime.keys(Resource.handlers);
+                array.forEach(resources, function(resource){
+                    array.forEach(types, function(type){
+                        var tagInfo = Resource.handlers[type].tagProfile();
+                        tags.push('<'+tagInfo.name+' '+assembleAttrs(tagInfo.attrs, tagInfo.target, compact+dependencies+'/'+resource.options.name)+'></'+tagInfo.name+'>');
+                    });
+                });
+            }else{
+                var types = prime.keys(Resource.handlers);
+                array.forEach(types, function(type){
+                    var tagInfo = Resource.handlers[type].tagProfile();
+                    var resList = []
+                    array.forEach(resources, function(resource){
+                        resList.push(resource.options.name);
+                    });
+                    tags.push('<'+tagInfo.name+' '+assembleAttrs(tagInfo.attrs, tagInfo.target, '/'+type+compact+dependencies+'/'+resList.join('.'))+'></'+tagInfo.name+'>');
+                });
+            }
+        }
+    };
+    if(options.dependencies === false && options.explicitDependencies)
+        Resource.explicit(options.registry, (options.excludes || []), handler);
+    else Resource.includes(options.registry, (options.excludes || []), handler);
+}
+
+Resource.handle = function(request, response, passthru){
     var url = require('url');
     var uri = url.parse(request.url, true);
     var value;
     var wasResourceRequest = false;
-    for(var key in ProtolusResource.handlers){
+    for(var key in Resource.handlers){
         if(wasResourceRequest) return;
         if(uri.pathname.indexOf('/'+key+'/') === 0){
             var rem = uri.pathname.substring(('/'+key+'/').length);
             var resources = rem.split(".");
             var results = [];
-            array.forEachEmission(resources, function(name, index, returnFn){
-                import_resource(name, function(resource){
-                    resource.files(key, function(files){
-                        array.forEach(files, function(file){
-                            results.push(file);
-                        });
-                        returnFn();
-                    });
+            var requestedFileType = key;
+            var handler = Resource.handlers[requestedFileType];
+            var options = {
+                compact : false,
+                dependencies : false,
+                excludes : []
+            }
+            var parts = uri.pathname.split('/');
+            array.forEach(parts, function(part){
+                switch(part.toLowerCase()){
+                    case 'compact':
+                        options.compact = true;
+                        break;
+                    case 'dependencies':
+                        options.dependencies = true;
+                        break;
+                }
+            });
+            var registry = new Resource.Registry();
+            array.forEachEmission(resources, function(name, index, rtrn){
+                Resource.import(name, registry, function(resource){
+                    rtrn();
                 });
             }, function(){
-                response.writeHead(200);
-                response.end(results.join("\n"));
+                var results = [];
+                var resourceList = (options.dependencies ? registry.resources : registry.explicit);
+                array.forEachEmission(resourceList, function(resourceName, index, rtrn){
+                    var resource = registry.require(resourceName);
+                    resource.files(requestedFileType, function(files, fileNames){
+                        array.forEach(files, function(file, index){
+                            handler.handle({
+                                body : file,
+                                location : '/node_modules/'+resource.options.name+'/'+fileNames[index],
+                                name : resource.options.name,
+                                compact : options.compact
+                            }, function(result){
+                                results.push(result);
+                            });
+                        });
+                        rtrn();
+                    });
+                }, function(){
+                    response.writeHead(200);
+                    response.end(results.join("\n"));
+                });
             });
             wasResourceRequest = true;
         }
     }
     if(!wasResourceRequest) passthru();
-}
+};
+
+Resource.handlers = {};
+Resource.registerHandler = function(name, handler){
+    Resource.handlers[name] = handler;
+};
+module.exports = Resource;

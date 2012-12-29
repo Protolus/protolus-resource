@@ -7,18 +7,22 @@ Server Side
 -----------
 First require the module:
 
-    var resource = require('protolus-resource');
+    var Resource = require('protolus-resource');
+    
+Next you'll need a registry to keep track of all the modules that get unrolled:
+
+    var register = new Resource.Registry();
     
 Then, to actually register a resource:
 
-    resource('my_npm_module', function(moduleResources){
+    Resource.import('my_npm_module', registry, function(resource){
         //all done
     });
 
 once you've done this you can access all the included resources, with or without dependencies
 
-    var resourceList = resource.allResources();
-    var fullResourceList = resource.allResourcesWithDependencies();
+    var resourceList = Resource.includes(registry, [excludes], [callback]);
+    var fullResourceList = Resource.explicit(registry, [excludes], [callback]);
     
 you'll need this to generate your own URL back to fetch the right resource bundle, each filetype can be requested from from it's own endpoint, for example to request the js files from the 'my_npm_module' npm module I would use:
 
@@ -28,24 +32,20 @@ if I wanted it minified with npm module 'another_module':
 
     '/js/compact/my_npm_module.another_module'
     
-I'd produce a url like that after having used resource() on the modules I need:
-
-    var location = '/js/compact/'+resource.allResourcesWithDependencies().join('.');
-    
 or I can get an array of head tags, after resources are registered, using resource.headIncludes(<options>, <callback>) where options may be a complex object or a boolean representing the 'combined' option.
 - *combined* : are the resources a series of sequential tags or one large combined one?
 - *compact* : are the resources built uncompressed, or are they minified/compacted/etc. ?
 
-        resource.headIncludes(true, function(tags){
+        Resource.head(true, function(tags){
             res.end('<html><head>'+(tags.join("\n"))+'</head><body><h1>Heya!</h1></body></html>');
         });
 
 On the other side of things, in your server, theres a passthrough for handling the serving of all these resources which we can use to put it all together:
 
     var app = require('http').createServer(function handler(req, res) {
-        resource.handleResourceCalls(req, res, function(){
-            resource('test-component', function(){
-                resource.headIncludes(true, function(tags){
+        Resource.handle(req, res, function(){
+            Resource.import('test-component', registry, function(){
+                Resource.head(true, function(tags){
                     res.end('<html><head>'+(tags.join("\n"))+'</head><body><h1>Heya!</h1></body></html>');
                 }); 
             });
@@ -53,7 +53,11 @@ On the other side of things, in your server, theres a passthrough for handling t
     });
     app.listen(80);
     
-Then we can get combined payloads into the browser without committing to a build process or async loading every required module individually.
+Then we can get combined payloads into the browser without committing to a build process or async loading every required module, individually.
+
+Currently supported are: scss, less, css, javascript and coffeescript
+
+    require('protolus-resource/handler-<type>');
 
 Client Side
 -----------

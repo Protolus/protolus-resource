@@ -1,15 +1,19 @@
 {
     "name": "protolus-resource",
     "homepage": "https://github.com/Protolus/protolus-resource",
-    "version": "0.0.1-alpha",
+    "version": "0.0.2-alpha",
     "main": "protolus-resource.js",
     "description": "a CommonJS based server-side resource delivery mechanism with client side shim",
     "keywords": [
         "url",
         "router",
+        "resources",
+        "scss",
+        "less",
         "protolus",
-        "ini",
-        "conf"
+        "coffeescript",
+        "browser",
+        "css"
     ],
     "author": "Abbey Hawk Sparrow <@khrome> (http://patternweaver.com)",
     "contributors": [],
@@ -24,14 +28,20 @@
     "dependencies": {
         "prime": "*",
         "url":"*",
-        "Classy":"*"
+        "Classy":"*",
+        "npm-trospect" :"*",
+        "prime-ext" :"*"
     },
     "devDependencies": {
         "mocha": "*",
         "should": "*",
         "request":"*"
     },
-    "optionalDependencies": {},
+    "optionalDependencies": {
+        "node-sass": "*",
+        "less": "*",
+        "coffeescript-compiler": "*"
+    },
     "engines": {
         "node": "*"
     }

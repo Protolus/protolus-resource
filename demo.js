@@ -1,11 +1,13 @@
-var resource = require('./protolus-resource');
+require('npm-trospect').require = require; //global require
+var Resource = require('./protolus-resource');
+require('./handler-js');
 
-var app = require('http').createServer(function handler(req, res) {
-    resource.handleResourceCalls(req, res, function(){
-        resource('test-component', function(){
-            resource.headIncludes(true, function(tags){
+var app = require('http').createServer(function handler(req, res){
+    Resource.handle(req, res, function(){
+        new Resource('test-component', function(){
+            Resource.head(true, function(tags){
                 res.end('<html>'+"\n  "+'<head>'+"\n    "+(tags.join("\n    "))+"\n  "+'</head>'+"\n  "+'<body><h1>Heya!</h1>'+"\n  "+'</body>'+"\n"+'</html>');
-            }); 
+            });
         });
     });
 });
