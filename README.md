@@ -32,7 +32,7 @@ if I wanted it minified with npm module 'another_module':
 
     '/js/compact/my_npm_module.another_module'
     
-or I can get an array of head tags, after resources are registered, using resource.headIncludes(<options>, <callback>) where options may be a complex object or a boolean representing the 'combined' option.
+or I can get an array of head tags, after resources are registered, using `Resource.head(<options>, <callback>)` where options may be a complex object or a boolean representing the 'combined' option.
 - *combined* : are the resources a series of sequential tags or one large combined one?
 - *compact* : are the resources built uncompressed, or are they minified/compacted/etc. ?
 
