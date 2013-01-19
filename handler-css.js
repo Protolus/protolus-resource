@@ -14,7 +14,7 @@ var CSSHandler = new Class({
             name : 'link',
             attrs : {
             },
-            pathTarget : 'href'
+            target : 'href'
         };
     }
 });
