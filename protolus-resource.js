@@ -390,7 +390,7 @@ Resource.handle = function(request, response, passthru){
                 array.forEachEmission(resourceList, function(resourceName, index, rtrn){
                     var resource = registry.require(resourceName);
                     resource.files(type, function(files, fileNames){
-                        array.forEach(files, function(file, index){
+                        array.forEachEmission(files, function(file, index, back){
                             handler.handle({
                                 body : file,
                                 location : '/node_modules/'+resource.options.name+'/'+fileNames[index],
@@ -398,9 +398,11 @@ Resource.handle = function(request, response, passthru){
                                 compact : options.compact
                             }, function(result){
                                 results.push(result);
+                                back();
                             });
+                        }, function(){
+                            rtrn();
                         });
-                        rtrn();
                     });
                 }, function(){
                     response.writeHead(200);

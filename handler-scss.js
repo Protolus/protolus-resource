@@ -17,6 +17,8 @@ var SCSSHandler = new Class({
         return {
             name : 'link',
             attrs : {
+                rel:"stylesheet",
+                type:"text/css" 
             },
             target : 'href'
         };
