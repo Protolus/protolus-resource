@@ -419,4 +419,7 @@ Resource.handlers = {};
 Resource.registerHandler = function(name, handler){
     Resource.handlers[name] = handler;
 };
+Resource.internalRequire = function(topLevelRequire){
+    require.pkg.require = topLevelRequire;
+};
 module.exports = Resource;
