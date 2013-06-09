@@ -41,8 +41,13 @@ var JavascriptMainHandler = new Class({
         };
     }
 });
-Resource.registerHandler('js', new JavascriptHandler());
-Resource.registerHandler('main', new JavascriptMainHandler());
+var instance = new JavascriptHandler();
+Resource.registerHandler('js', instance);
+JavascriptHandler.instance = instance;
+
+var instance = new JavascriptMainHandler();
+Resource.registerHandler('main', instance);
+JavascriptMainHandler.instance = instance;
 
 module.exports = JavascriptHandler;
 module.exports.Main = JavascriptMainHandler;

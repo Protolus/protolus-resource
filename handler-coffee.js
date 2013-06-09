@@ -22,6 +22,9 @@ var CoffeeScriptHandler = new Class({
         };
     }
 });
-Resource.registerHandler('coffee', new CoffeeScriptHandler());
+
+var instance = new CoffeeScriptHandler();
+Resource.registerHandler('coffee', instance);
+CoffeeScriptHandler.instance = instance;
 
 module.exports = CoffeeScriptHandler;

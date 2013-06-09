@@ -20,5 +20,8 @@ var CSSHandler = new Class({
         };
     }
 });
-Resource.registerHandler('css', new CSSHandler());
+var instance = new CSSHandler();
+Resource.registerHandler('css', instance);
+CSSHandler.instance = instance;
+
 module.exports = CSSHandler;

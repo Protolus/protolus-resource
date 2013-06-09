@@ -12,15 +12,21 @@ var LessHandler = new Class({
         parts.pop();
         var dir = parts.join('/');
         try{
-        var parser = new(less.Parser)({
-            paths: [dir], // Specify search paths for @import directives
-            filename: path // Specify a filename, for better error messages
-        });
+            var parser = new(less.Parser)({
+                paths: [dir], // Specify search paths for @import directives
+                filename: path // Specify a filename, for better error messages
+            });
             parser.parse(options.body, function (e, tree) {
-                if(e) callback('/* ERROR : '+e+'*'+'/');
-                else{
-                    var css = tree.toCSS({ compress: options.compact || false });
-                    callback(css);
+                if(e){
+                    console.log('LESS ERROR', e);
+                    callback('/* ERROR : '+e.message+'*'+'/');
+                }else{
+                    try{
+                        var css = tree.toCSS({ compress: options.compact || false });
+                        callback(css);
+                    }catch(ex){
+                        console.log('LESS ERROR', ex);
+                    }
                 }
             });
         }catch(ex){
@@ -38,5 +44,7 @@ var LessHandler = new Class({
         };
     }
 });
-Resource.registerHandler('less', new LessHandler());
+var instance = new LessHandler();
+Resource.registerHandler('less', instance);
+LessHandler.instance = instance;
 module.exports = LessHandler;
