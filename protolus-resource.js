@@ -21,7 +21,9 @@ var Client = function(options){
         Protolus.packages = ['mootools-core','protolus'];
         Protolus.loaded = {};
         Protolus.scripts = {};
+        Protolus.waiting = [];
     }
+    
 };
 Client.require = function(moduleName, callback){
     a = {};
@@ -55,6 +57,19 @@ Client.require = function(moduleName, callback){
         };
     }
 };
+Client.ready = function(callback){
+    if(callback === true){
+        var waiting = Protolus.waiting;
+        Protolus.waiting = [];
+        waiting.forEach(function(cb){
+            cb();
+        });
+        Protolus.loadComplete = true;
+        return;
+    }
+    if(Protolus.loadComplete) callback();
+    Protolus.waiting.push(callback);
+}
 Client.register = function(name, source){
     if(!Protolus.loaded) Protolus();
     if(name && source){
@@ -85,6 +100,7 @@ var Resource = new Class({
                         'var Protolus = '+(Client.toString())+';',
                         'Protolus.require = '+(Client.require.toString())+';',
                         'Protolus.register = '+(Client.register.toString())+';',
+                        'Protolus.ready = '+(Client.ready.toString())+';',
                         'window.onload = Protolus;'
                     ].join("\n")]);
                 }else callback([]);
@@ -295,6 +311,7 @@ Resource.head = function(options, callback){ //get head
                     tags.push('<'+tagInfo.name+' '+assembleAttrs(tagInfo.attrs, tagInfo.target, '/'+type+compact+dependencies+'/'+resList.join('.'))+'></'+tagInfo.name+'>');
                 });
             }
+            tags.push('<script>Protolus.ready(true);</script>');
             if(callback) callback(tags);
         }
     };
@@ -334,6 +351,7 @@ Resource.handle = function(request, response, passthru){
             'var Protolus = '+(Client.toString())+';',
             'Protolus.require = '+(Client.require.toString())+';',
             'Protolus.register = '+(Client.register.toString())+';',
+            'Protolus.ready = '+(Client.ready.toString())+';',
             'window.onload = Protolus;'
         ].join("\n"));
         wasResourceRequest = true;
