@@ -437,6 +437,13 @@ Resource.handlers = {};
 Resource.registerHandler = function(name, handler){
     Resource.handlers[name] = handler;
 };
+Resource.enable = function(type){
+    try{
+        //var instance = require('protolus-resource/handler-'+type).instance;
+        var instance = require('./handler-'+type).instance;
+        Resource.registerHandler(type, instance);
+    }catch(ex){ }
+};
 Resource.internalRequire = function(topLevelRequire){
     require.pkg.require = topLevelRequire;
 };
